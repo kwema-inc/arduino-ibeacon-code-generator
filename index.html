@@ -7,6 +7,7 @@
 </head>
 <body>
   <h1>Generador de Código Arduino iBeacon</h1>
+
   <label for="uuid">UUID:</label>
   <input type="text" id="uuid" placeholder="Ej: 4B57454D-4132-3430-3630-303030304541" style="width: 400px;"><br><br>
 
@@ -16,26 +17,40 @@
   <label for="minor">Minor:</label>
   <input type="number" id="minor" placeholder="Ej: 30520"><br><br>
 
+  <label for="txPower">Tx Power (dBm):</label>
+  <input type="number" id="txPower" placeholder="Ej: -59"><br><br>
+
   <button id="generate">Generar Código</button>
+
   <h2>Código Generado:</h2>
   <pre><code id="output" style="background-color: #f4f4f4; padding: 10px; border: 1px solid #ddd; display: block;"></code></pre>
 
   <script>
     document.getElementById("generate").addEventListener("click", () => {
-        const uuid = document.getElementById("uuid").value.toUpperCase().replace(/-/g, '');
-        const major = parseInt(document.getElementById("major").value) || 0;
-        const minor = parseInt(document.getElementById("minor").value) || 0;
+      const uuid = document.getElementById("uuid").value.toUpperCase().replace(/-/g, '');
+      const major = parseInt(document.getElementById("major").value) || 0;
+      const minor = parseInt(document.getElementById("minor").value) || 0;
+      // Valor por defecto si el campo está vacío o inválido
+      let txPower = parseInt(document.getElementById("txPower").value);
+      if (isNaN(txPower)) txPower = -59;
 
-        if (uuid.length !== 32) {
-            alert("El UUID debe tener exactamente 32 caracteres (16 bytes) después de quitar los guiones.");
-            return;
-        }
+      if (uuid.length !== 32) {
+        alert("El UUID debe tener exactamente 32 caracteres (16 bytes) después de quitar los guiones.");
+        return;
+      }
 
-        const uuidBytes = uuid.match(/.{1,2}/g).map(byte => `0x${byte}`);
-        const majorBytes = [(major >> 8) & 0xFF, major & 0xFF].map(byte => `0x${byte.toString(16).toUpperCase().padStart(2, '0')}`);
-        const minorBytes = [(minor >> 8) & 0xFF, minor & 0xFF].map(byte => `0x${byte.toString(16).toUpperCase().padStart(2, '0')}`);
+      // Convertir UUID a bytes
+      const uuidBytes = uuid.match(/.{1,2}/g).map(byte => `0x${byte}`);
+      // Major y Minor a bytes
+      const majorBytes = [(major >> 8) & 0xFF, major & 0xFF]
+        .map(b => `0x${b.toString(16).toUpperCase().padStart(2, '0')}`);
+      const minorBytes = [(minor >> 8) & 0xFF, minor & 0xFF]
+        .map(b => `0x${b.toString(16).toUpperCase().padStart(2, '0')}`);
+      // Tx Power en dos complementos (signed byte → unsigned representation)
+      const txByte = txPower < 0 ? (0x100 + txPower) : txPower;
+      const txHex = `0x${txByte.toString(16).toUpperCase().padStart(2, '0')}`;
 
-        const code = `
+      const code = `
 #include <ArduinoBLE.h>
 
 void setup() {
@@ -43,8 +58,8 @@ void setup() {
   while (!Serial);
 
   if (!BLE.begin()) {
-      Serial.println("No se pudo inicializar BLE");
-      while (1);
+    Serial.println("No se pudo inicializar BLE");
+    while (1);
   }
 
   // Configuración del nombre del dispositivo
@@ -53,31 +68,31 @@ void setup() {
 
   // Datos de advertising con Manufacturer Data
   uint8_t manufacturerData[] = {
-      0x4C, 0x00,                   // ID de fabricante (Apple)
-      0x02, 0x15,                   // iBeacon type + longitud
-      ${uuidBytes.join(', ')},       // UUID (16 bytes)
-      ${majorBytes.join(', ')},      // Major
-      ${minorBytes.join(', ')},      // Minor
-      0xC5                          // Tx Power
+    0x4C, 0x00,               // Apple Manufacturer ID
+    0x02, 0x15,               // iBeacon type + length
+    ${uuidBytes.join(', ')}, // UUID (16 bytes)
+    ${majorBytes.join(', ')},// Major
+    ${minorBytes.join(', ')},// Minor
+    ${txHex}                 // Tx Power (configurable)
   };
 
-  // Establecer los datos Manufacturer Data
+  // Establecer datos Manufacturer Data
   BLE.setManufacturerData(manufacturerData, sizeof(manufacturerData));
 
   // Iniciar advertising
   if (BLE.advertise()) {
-      Serial.println("Advertising iniciado correctamente");
+    Serial.println("Advertising iniciado correctamente");
   } else {
-      Serial.println("Error al iniciar advertising");
+    Serial.println("Error al iniciar advertising");
   }
 }
 
 void loop() {
-    // Mantener BLE activo
+  // Mantener BLE activo
 }
-        `.trim();
+      `.trim();
 
-        document.getElementById("output").textContent = code;
+      document.getElementById("output").textContent = code;
     });
   </script>
 </body>
